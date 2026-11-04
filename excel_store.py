@@ -206,7 +206,7 @@ def _add_charts(ws_sum, ws_nse, ws_bse, sym: str, nse_rows, bse_rows):
         d = nse_rows[span[1]][2]
         # Categories from Summary dates; prices from Summary (which mirror the NSE sheet).
         chart = _price_chart(ws_sum, f"{name} Share Price {d:%b'%y} (INR) - NSE", 3, 4, 5, 6, 7,
-                             "Average Price", 3, span[0] + 4, span[1] + 4)
+                             "WAP", 3, span[0] + 4, span[1] + 4)
         ws_sum.add_chart(chart, "Q3")
     span = _month_span([r[0] for r in bse_rows])
     if span:

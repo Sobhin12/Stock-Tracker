@@ -11,7 +11,8 @@ import requests
 
 BLOB_API = os.environ.get("BLOB_API_URL", "https://blob.vercel-storage.com")
 BLOB_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN")
-PATHNAME = "Stock_Trading_Snapshot.xlsx"
+ACCESS = os.environ.get("BLOB_ACCESS", "private")  # must match the store's setting
+PATHNAME ="Stock_Trading_Snapshot.xlsx"
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 _pulled_version: str | None = None  # uploadedAt of the copy currently on disk
@@ -43,7 +44,7 @@ def pull(path: Path) -> None:
     if blob["uploadedAt"] == _pulled_version and path.exists():
         return
     # The version in the query string keeps the CDN from serving an older copy.
-    r = requests.get(blob["url"], params={"v": blob["uploadedAt"]}, timeout=60)
+    r = requests.get(blob["url"], params={"v": blob["uploadedAt"]}, headers=_headers(), timeout=60)
     r.raise_for_status()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(r.content)
@@ -58,9 +59,11 @@ def push(path: Path) -> None:
     r = requests.put(
         f"{BLOB_API}/{PATHNAME}", data=path.read_bytes(), timeout=120,
         headers=_headers(**{
+            "x-vercel-blob-access": ACCESS,
             "x-content-type": XLSX_TYPE, "x-add-random-suffix": "0",
             "x-allow-overwrite": "1", "x-cache-control-max-age": "60",
         }),
     )
-    r.raise_for_status()
+    if not r.ok:
+        raise RuntimeError(f"Blob upload failed: {r.status_code} {r.text}")
     _pulled_version = None  # re-check uploadedAt on the next pull

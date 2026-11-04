@@ -55,10 +55,13 @@ main { padding: 20px 24px 40px; max-width: 1500px; margin: 0 auto; }
 .company.active { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan) inset; background: var(--cyan-tint); }
 .company .sym { font-weight: 700; color: var(--navy); }
 .company .name { color: var(--muted); font-size: .85rem; }
-.company .price { margin-top: 8px; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-.company .chg { font-size: .85rem; margin-left: 6px; }
+.company .quote { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.company .quote:first-of-type { margin-top: 10px; }
+.company .ex { font-size: .75rem; font-weight: 700; color: var(--muted); width: 2.6em; }
+.company .price { font-size: 1.1rem; font-weight: 600; }
+.company .chg { font-size: .85rem; }
+.company .quote .date { color: var(--muted); font-size: .75rem; margin-left: auto; }
 .up { color: var(--up); } .down { color: var(--down); }
-.company .dates { color: var(--muted); font-size: .75rem; margin-top: 4px; }
 
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin: 24px 0 12px; gap: 12px; flex-wrap: wrap; }
 .toolbar label { color: var(--muted); font-size: .9rem; display: flex; gap: 8px; align-items: center; }

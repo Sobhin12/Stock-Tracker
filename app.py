@@ -1,13 +1,11 @@
-"""FastAPI app: refresh data from NSE/BSE into the workbook, serve charts and the file."""
+"""FastAPI app: refresh data from NSE/BSE into the workbook, serve charts."""
 import threading
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import excel_store as store
-import storage
 from config import BASE_DIR, COMPANIES, START_DATE, XLSX_PATH
 from fetchers.bse import fetch_bse
 from fetchers.nse import fetch_nse
@@ -73,19 +71,29 @@ def _iso(last):
     return {s: {k: v.isoformat() if v else None for k, v in d.items()} for s, d in last.items()}
 
 
+def _day_change(rows, di, ci):
+    """Latest close and its change from the previous trading day's close."""
+    if not rows:
+        return None
+    close = rows[-1][ci]
+    prev = rows[-2][ci] if len(rows) > 1 else None
+    chg = close - prev if isinstance(close, (int, float)) and isinstance(prev, (int, float)) else None
+    return {"date": rows[-1][di].isoformat(), "close": close, "change": chg,
+            "pct": chg / prev * 100 if chg is not None and prev else None}
+
+
 @app.get("/api/companies")
 def companies():
     data = store.load_data()
     last = store.last_dates(data)
     out = []
     for sym, info in COMPANIES.items():
-        nse_rows = data[sym]["nse"]
         out.append({
             "symbol": sym, "name": info["name"], "bse_code": info["bse_code"],
             "last_nse": last[sym]["nse"].isoformat() if last[sym]["nse"] else None,
             "last_bse": last[sym]["bse"].isoformat() if last[sym]["bse"] else None,
-            "last_close": nse_rows[-1][8] if nse_rows else None,
-            "prev_close": nse_rows[-1][3] if nse_rows else None,
+            "nse": _day_change(data[sym]["nse"], 2, 8),
+            "bse": _day_change(data[sym]["bse"], 0, 4),
         })
     return {"companies": out, "today": today_ist().isoformat(), "has_file": XLSX_PATH.exists()}
 
@@ -109,7 +117,6 @@ def chart(sym: str, exchange: str = "nse", month: str | None = None):
         "labels": [r[di].strftime("%d-%b") for r in sel],
         "high": [rnd(r[hi]) for r in sel], "low": [rnd(r[li]) for r in sel],
         "close": [rnd(r[ci]) for r in sel], "avg": [rnd(r[ai]) for r in sel],
-        "avg_label": "Average Price" if exchange == "nse" else "WAP",
     }
 
 
@@ -123,16 +130,6 @@ def do_refresh():
         _lock.release()
 
 
-@app.get("/api/download")
-def download():
-    storage.pull(XLSX_PATH)
-    if not XLSX_PATH.exists():
-        raise HTTPException(404, "Workbook not created yet - click Refresh first")
-    return FileResponse(
-        XLSX_PATH, filename=f"Stock_Trading_Snapshot_{today_ist():%d.%m.%Y}.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-
 # Local dev serves the page; on Vercel the CDN serves public/ before reaching the app.
-app.mount("/", StaticFiles(directory=BASE_DIR / "public", html=True), name="static")
+if (BASE_DIR / "public").is_dir():
+    app.mount("/", StaticFiles(directory=BASE_DIR / "public", html=True), name="static")

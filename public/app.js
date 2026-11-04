@@ -19,18 +19,23 @@ function toast(msg, isError = false, ms = 6000) {
   t._timer = setTimeout(() => (t.hidden = true), ms);
 }
 
+function quote(exchange, q) {
+  if (!q) return `<div class="quote"><span class="ex">${exchange}</span><span class="price">–</span></div>`;
+  const chg = q.change == null ? "" : `<span class="chg ${q.change >= 0 ? "up" : "down"}">${q.change >= 0 ? "▲" : "▼"} ${fmt(Math.abs(q.change))} (${Math.abs(q.pct).toFixed(2)}%)</span>`;
+  return `<div class="quote"><span class="ex">${exchange}</span><span class="price">₹${fmt(q.close)}</span>${chg}<span class="date">${fmtDate(q.date)}</span></div>`;
+}
+
 function renderCompanies() {
   const box = $("companies");
   box.innerHTML = "";
   for (const c of state.companies) {
-    const chg = c.last_close != null && c.prev_close ? ((c.last_close - c.prev_close) / c.prev_close) * 100 : null;
     const el = document.createElement("button");
     el.className = "company" + (c.symbol === state.symbol ? " active" : "");
     el.innerHTML = `
       <div class="sym">${c.symbol}</div>
       <div class="name">${c.name} · BSE ${c.bse_code}</div>
-      <div class="price">₹${fmt(c.last_close)}${chg == null ? "" : `<span class="chg ${chg >= 0 ? "up" : "down"}">${chg >= 0 ? "▲" : "▼"} ${chg.toFixed(2)}%</span>`}</div>
-      <div class="dates">NSE ${fmtDate(c.last_nse)} · BSE ${fmtDate(c.last_bse)}</div>`;
+      ${quote("NSE", c.nse)}
+      ${quote("BSE", c.bse)}`;
     el.onclick = () => selectCompany(c.symbol);
     box.appendChild(el);
   }
@@ -59,7 +64,7 @@ function drawChart(exchange, d, company) {
     data: {
       labels: d.labels,
       datasets: [
-        { type: "line", label: d.avg_label, data: d.avg, borderColor: "#FFAF14", backgroundColor: "#FFAF14", borderWidth: 2.5, pointRadius: 3, tension: 0, order: 0 },
+        { type: "line", label: "WAP", data: d.avg, borderColor: "#FFAF14", backgroundColor: "#FFAF14", borderWidth: 2.5, pointRadius: 3, tension: 0, order: 0 },
         { type: "bar", label: "High Price", data: d.high, backgroundColor: "#00B0F6", order: 1 },
         { type: "bar", label: "Low Price", data: d.low, backgroundColor: "#003274", order: 1 },
         { type: "bar", label: "Close Price", data: d.close, backgroundColor: "#8EAFC0", order: 1 },
@@ -143,8 +148,5 @@ async function refresh() {
 
 $("refreshBtn").onclick = refresh;
 $("monthSelect").onchange = (e) => { state.month = e.target.value; loadCharts(); };
-$("downloadBtn").onclick = (e) => {
-  if (!state.companies.some((c) => c.last_nse)) { e.preventDefault(); toast("No workbook yet – click Refresh first.", true); }
-};
 
 loadCompanies().then(loadCharts).catch((e) => toast("Failed to load: " + e.message, true));
