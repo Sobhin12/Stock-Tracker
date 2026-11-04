@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stock Trading Snapshot</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Stock Trading Snapshot</h1>
+      <p class="sub">NSE &amp; BSE daily trading data · <span id="lastUpdated">–</span></p>
+    </div>
+    <div class="actions">
+      <button id="refreshBtn" class="btn primary"><span class="spinner" hidden></span><span class="label">Refresh</span></button>
+      <a id="downloadBtn" class="btn" href="/api/download">Download Excel</a>
+    </div>
+  </header>
+
+  <main>
+    <section id="companies" class="companies" aria-label="Companies"></section>
+
+    <div class="toolbar">
+      <h2 id="companyTitle">–</h2>
+      <label>Month
+        <select id="monthSelect"></select>
+      </label>
+    </div>
+
+    <section class="charts">
+      <figure class="card">
+        <figcaption>NSE</figcaption>
+        <div class="chart-wrap"><canvas id="nseChart"></canvas></div>
+        <p class="empty" id="nseEmpty" hidden>No NSE data for this month.</p>
+      </figure>
+      <figure class="card">
+        <figcaption>BSE</figcaption>
+        <div class="chart-wrap"><canvas id="bseChart"></canvas></div>
+        <p class="empty" id="bseEmpty" hidden>No BSE data for this month.</p>
+      </figure>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
