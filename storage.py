@@ -5,6 +5,7 @@ BLOB_READ_WRITE_TOKEN is set the workbook is kept in Vercel Blob: pull() copies 
 latest version to the local path before reading, push() uploads it after a save.
 """
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -16,6 +17,7 @@ PATHNAME ="Stock_Trading_Snapshot.xlsx"
 XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 _pulled_version: str | None = None  # uploadedAt of the copy currently on disk
+_pushed_at: datetime | None = None  # when this instance last uploaded its own copy
 
 
 def enabled() -> bool:
@@ -43,6 +45,11 @@ def pull(path: Path) -> None:
         return
     if blob["uploadedAt"] == _pulled_version and path.exists():
         return
+    # Just after an upload the listing can still report the previous blob; the copy
+    # on disk is the one we uploaded, so don't replace it with that older version.
+    uploaded = datetime.fromisoformat(blob["uploadedAt"].replace("Z", "+00:00"))
+    if _pushed_at and uploaded < _pushed_at and path.exists():
+        return
     # The version in the query string keeps the CDN from serving an older copy.
     r = requests.get(blob["url"], params={"v": blob["uploadedAt"]}, headers=_headers(), timeout=60)
     r.raise_for_status()
@@ -53,9 +60,10 @@ def pull(path: Path) -> None:
 
 def push(path: Path) -> None:
     """Upload path as the stored workbook (no-op without Blob)."""
-    global _pulled_version
+    global _pulled_version, _pushed_at
     if not enabled():
         return
+    started = datetime.now(timezone.utc)
     r = requests.put(
         f"{BLOB_API}/{PATHNAME}", data=path.read_bytes(), timeout=120,
         headers=_headers(**{
@@ -67,3 +75,4 @@ def push(path: Path) -> None:
     if not r.ok:
         raise RuntimeError(f"Blob upload failed: {r.status_code} {r.text}")
     _pulled_version = None  # re-check uploadedAt on the next pull
+    _pushed_at = started

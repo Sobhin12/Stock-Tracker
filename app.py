@@ -64,7 +64,7 @@ def refresh() -> dict:
     if changed or not XLSX_PATH.exists():
         store.save(data)
     return {"today": today.isoformat(), "updated": changed, "companies": result,
-            "last_dates": _iso(store.last_dates(data))}
+            "last_dates": _iso(store.last_dates(data))}, data
 
 
 def _iso(last):
@@ -82,9 +82,7 @@ def _day_change(rows, di, ci):
             "pct": chg / prev * 100 if chg is not None and prev else None}
 
 
-@app.get("/api/companies")
-def companies():
-    data = store.load_data()
+def _companies_view(data) -> dict:
     last = store.last_dates(data)
     out = []
     for sym, info in COMPANIES.items():
@@ -98,12 +96,7 @@ def companies():
     return {"companies": out, "today": today_ist().isoformat(), "has_file": XLSX_PATH.exists()}
 
 
-@app.get("/api/chart/{sym}")
-def chart(sym: str, exchange: str = "nse", month: str | None = None):
-    sym = sym.upper()
-    if sym not in COMPANIES or exchange not in ("nse", "bse"):
-        raise HTTPException(404, "Unknown company or exchange")
-    rows = store.load_data()[sym][exchange]
+def _chart_view(rows, exchange: str, month: str | None) -> dict:
     # Column indexes of date, high, low, close, average in each sheet layout
     di, hi, li, ci, ai = (2, 5, 6, 8, 9) if exchange == "nse" else (0, 2, 3, 4, 5)
     months = sorted({r[di].strftime("%Y-%m") for r in rows})
@@ -120,14 +113,36 @@ def chart(sym: str, exchange: str = "nse", month: str | None = None):
     }
 
 
+@app.get("/api/companies")
+def companies():
+    return _companies_view(store.load_data())
+
+
+@app.get("/api/chart/{sym}")
+def chart(sym: str, exchange: str = "nse", month: str | None = None):
+    sym = sym.upper()
+    if sym not in COMPANIES or exchange not in ("nse", "bse"):
+        raise HTTPException(404, "Unknown company or exchange")
+    return _chart_view(store.load_data()[sym][exchange], exchange, month)
+
+
 @app.post("/api/refresh")
-def do_refresh():
+def do_refresh(symbol: str | None = None, month: str | None = None):
     if not _lock.acquire(blocking=False):
         raise HTTPException(409, "A refresh is already running")
     try:
-        return refresh()
+        result, data = refresh()
     finally:
         _lock.release()
+    # Send the updated data back with the result. Reading it again from Blob right
+    # after the upload can still return the previous copy for a few seconds.
+    sym = (symbol or "").upper()
+    sym = sym if sym in COMPANIES else next(iter(COMPANIES))
+    result["view"] = _companies_view(data) | {
+        "symbol": sym,
+        "charts": {ex: _chart_view(data[sym][ex], ex, month) for ex in ("nse", "bse")},
+    }
+    return result
 
 
 # Local dev serves the page; on Vercel the CDN serves public/ before reaching the app.

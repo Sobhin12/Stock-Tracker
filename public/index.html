@@ -30,14 +30,12 @@
 
     <section class="charts">
       <figure class="card">
-        <figcaption>NSE</figcaption>
-        <div class="chart-wrap"><canvas id="nseChart"></canvas></div>
-        <p class="empty" id="nseEmpty" hidden>No NSE data for this month.</p>
-      </figure>
-      <figure class="card">
-        <figcaption>BSE</figcaption>
-        <div class="chart-wrap"><canvas id="bseChart"></canvas></div>
-        <p class="empty" id="bseEmpty" hidden>No BSE data for this month.</p>
+        <div class="toggle" id="exchangeToggle" role="group" aria-label="Exchange">
+          <button type="button" data-ex="nse" aria-pressed="true">NSE</button>
+          <button type="button" data-ex="bse" aria-pressed="false">BSE</button>
+        </div>
+        <div class="chart-wrap"><canvas id="chart"></canvas></div>
+        <p class="empty" id="chartEmpty" hidden>No data for this month.</p>
       </figure>
     </section>
   </main>

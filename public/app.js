@@ -1,4 +1,4 @@
-const state = { companies: [], symbol: null, month: null, charts: {} };
+const state = { companies: [], symbol: null, month: null, exchange: "nse", data: null, chart: null };
 const $ = (id) => document.getElementById(id);
 const fmt = (v) => (v == null ? "–" : Number(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const fmtDate = (s) => (s ? new Date(s + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "–");
@@ -47,11 +47,19 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-function drawChart(exchange, d, company) {
-  const canvas = $(exchange + "Chart");
-  const empty = $(exchange + "Empty");
-  state.charts[exchange]?.destroy();
-  const has = d.labels.length > 0;
+function drawChart() {
+  const exchange = state.exchange;
+  const d = state.data?.[exchange];
+  const company = state.companies.find((x) => x.symbol === state.symbol);
+  const canvas = $("chart");
+  const empty = $("chartEmpty");
+  for (const b of document.querySelectorAll("#exchangeToggle button")) {
+    b.setAttribute("aria-pressed", b.dataset.ex === exchange);
+  }
+  state.chart?.destroy();
+  state.chart = null;
+  const has = !!d && d.labels.length > 0;
+  empty.textContent = `No ${exchange.toUpperCase()} data for this month.`;
   empty.hidden = has;
   canvas.parentElement.hidden = !has;
   if (!has) return;
@@ -60,7 +68,7 @@ function drawChart(exchange, d, company) {
   // Leave headroom below the lowest price so the Low bars stay readable.
   const lo = Math.min(...d.low.filter((v) => v != null)), hi = Math.max(...d.high.filter((v) => v != null));
   const yMin = Math.max(0, Math.floor(lo - (hi - lo) * 1.5 - lo * 0.01));
-  state.charts[exchange] = new Chart(canvas, {
+  state.chart = new Chart(canvas, {
     data: {
       labels: d.labels,
       datasets: [
@@ -86,14 +94,10 @@ function drawChart(exchange, d, company) {
   });
 }
 
-async function loadCharts() {
+// Show chart data for the selected company; n and b are /api/chart responses.
+function showCharts(n, b) {
   const c = state.companies.find((x) => x.symbol === state.symbol);
   $("companyTitle").textContent = `${c.name} (${c.symbol})`;
-  const q = state.month ? `&month=${state.month}` : "";
-  const [n, b] = await Promise.all([
-    api(`/api/chart/${c.symbol}?exchange=nse${q}`),
-    api(`/api/chart/${c.symbol}?exchange=bse${q}`),
-  ]);
   const months = [...new Set([...n.months, ...b.months])].sort().reverse();
   const sel = $("monthSelect");
   sel.innerHTML = months
@@ -101,8 +105,17 @@ async function loadCharts() {
     .join("");
   state.month = state.month && months.includes(state.month) ? state.month : n.month || b.month;
   sel.value = state.month || "";
-  drawChart("nse", n, c);
-  drawChart("bse", b, c);
+  state.data = { nse: n, bse: b };
+  drawChart();
+}
+
+async function loadCharts() {
+  const q = state.month ? `&month=${state.month}` : "";
+  const [n, b] = await Promise.all([
+    api(`/api/chart/${state.symbol}?exchange=nse${q}`),
+    api(`/api/chart/${state.symbol}?exchange=bse${q}`),
+  ]);
+  showCharts(n, b);
 }
 
 async function selectCompany(sym) {
@@ -111,12 +124,14 @@ async function selectCompany(sym) {
   await loadCharts();
 }
 
-async function loadCompanies() {
-  const r = await api("/api/companies");
+function showCompanies(r) {
   state.companies = r.companies;
   state.symbol ??= r.companies[0].symbol;
   renderCompanies();
-  return r;
+}
+
+async function loadCompanies() {
+  showCompanies(await api("/api/companies"));
 }
 
 async function refresh() {
@@ -125,7 +140,12 @@ async function refresh() {
   btn.querySelector(".spinner").hidden = false;
   btn.querySelector(".label").textContent = "Refreshing…";
   try {
-    const r = await api("/api/refresh", { method: "POST" });
+    // If the latest month is on screen, follow the data into a new month.
+    const months = $("monthSelect").options;
+    const onLatest = !state.month || (months.length && state.month === months[0].value);
+    const params = new URLSearchParams({ symbol: state.symbol || "" });
+    if (state.month && !onLatest) params.set("month", state.month);
+    const r = await api("/api/refresh?" + params, { method: "POST" });
     const lines = [], errors = [];
     for (const [sym, ex] of Object.entries(r.companies)) {
       for (const [name, s] of Object.entries(ex)) {
@@ -135,8 +155,15 @@ async function refresh() {
     }
     if (errors.length) toast(["Some sources failed:", ...errors, ...lines].join("\n"), true, 12000);
     else toast(lines.length ? "Excel updated\n" + lines.join("\n") : "Already up to date – no new trading days since the latest date in the Excel.");
-    await loadCompanies();
-    await loadCharts();
+    // The response carries the updated data, so the page updates without a second request.
+    const v = r.view;
+    showCompanies(v);
+    if (v.symbol === state.symbol) {
+      if (onLatest) state.month = null;
+      showCharts(v.charts.nse, v.charts.bse);
+    } else {
+      await loadCharts();
+    }
   } catch (e) {
     toast("Refresh failed: " + e.message, true);
   } finally {
@@ -147,6 +174,9 @@ async function refresh() {
 }
 
 $("refreshBtn").onclick = refresh;
+for (const b of document.querySelectorAll("#exchangeToggle button")) {
+  b.onclick = () => { state.exchange = b.dataset.ex; drawChart(); };
+}
 $("monthSelect").onchange = (e) => { state.month = e.target.value; loadCharts(); };
 
 loadCompanies().then(loadCharts).catch((e) => toast("Failed to load: " + e.message, true));
