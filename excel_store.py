@@ -7,6 +7,8 @@ from openpyxl.chart.data_source import StrRef
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.series import SeriesLabel
 from openpyxl.chart.shapes import GraphicalProperties
+from openpyxl.chart.text import RichText
+from openpyxl.drawing.text import CharacterProperties, Paragraph, ParagraphProperties
 from openpyxl.drawing.line import LineProperties
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -161,6 +163,12 @@ def _month_span(dates: list[date]) -> tuple[int, int] | None:
     return first, len(dates) - 1
 
 
+def _font(size: int) -> RichText:
+    """Chart text properties with the given size in hundredths of a point."""
+    return RichText(p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=size)),
+                                 endParaRPr=CharacterProperties())])
+
+
 def _price_chart(ws_data, title, cat_col, high_col, low_col, close_col, avg_col, avg_name,
                  header_row, r1, r2):
     """Clustered columns High/Low/Close + line Average, styled like the sample."""
@@ -179,8 +187,13 @@ def _price_chart(ws_data, title, cat_col, high_col, low_col, close_col, avg_col,
         if line:
             s.graphicalProperties.line = LineProperties(solidFill=line)
     bar.set_categories(Reference(ws_data, min_col=cat_col, min_row=r1, max_row=r2))
-    bar.dataLabels = DataLabelList(showVal=True)
+    # Excel treats every flag left out as "on", so switch the others off explicitly;
+    # otherwise each label reads "High Price, 02-Nov-26, 536.05" with a legend key.
+    bar.dataLabels = DataLabelList(showVal=True, showSerName=False, showCatName=False,
+                                   showLegendKey=False, showPercent=False, showBubbleSize=False)
     bar.dataLabels.position = "outEnd"
+    bar.dataLabels.numFmt = "0.00"
+    bar.dataLabels.txPr = _font(800)
 
     line = LineChart()
     line.add_data(Reference(ws_data, min_col=avg_col, min_row=r1, max_row=r2), titles_from_data=False)
@@ -192,9 +205,14 @@ def _price_chart(ws_data, title, cat_col, high_col, low_col, close_col, avg_col,
     bar.y_axis.title = "INR"
     bar.y_axis.majorGridlines = None
     bar.x_axis.number_format = "dd-mmm"
+    # Keep a text axis: with dates Excel would switch to a date axis and leave empty
+    # slots for weekends and holidays.
+    bar.x_axis.auto = False
+    bar.x_axis.axPos = "b"
     bar.x_axis.delete = False
     bar.y_axis.delete = False
     bar.legend.position = "b"
+    bar.legend.overlay = False  # give the legend its own space below the date labels
     bar += line
     return bar
 
@@ -204,9 +222,10 @@ def _add_charts(ws_sum, ws_nse, ws_bse, sym: str, nse_rows, bse_rows):
     span = _month_span([r[2] for r in nse_rows])
     if span:
         d = nse_rows[span[1]][2]
-        # Categories from Summary dates; prices from Summary (which mirror the NSE sheet).
-        chart = _price_chart(ws_sum, f"{name} Share Price {d:%b'%y} (INR) - NSE", 3, 4, 5, 6, 7,
-                             "WAP", 3, span[0] + 4, span[1] + 4)
+        # Read the NSE sheet's plain values, not the Summary formulas: Excel doesn't
+        # recalculate a downloaded file in Protected View, so formula cells chart as 0.
+        chart = _price_chart(ws_nse, f"{name} Share Price {d:%b'%y} (INR) - NSE", 3, 6, 7, 9, 10,
+                             "WAP", 1, span[0] + 2, span[1] + 2)
         ws_sum.add_chart(chart, "Q3")
     span = _month_span([r[0] for r in bse_rows])
     if span:
