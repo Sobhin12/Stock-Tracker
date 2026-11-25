@@ -137,7 +137,6 @@ async function loadCompanies() {
 async function refresh() {
   const btn = $("refreshBtn");
   btn.disabled = true;
-  $("downloadBtn").classList.add("disabled"); // don't hand out the pre-refresh copy
   btn.querySelector(".spinner").hidden = false;
   btn.querySelector(".label").textContent = "Refreshing…";
   try {
@@ -169,20 +168,12 @@ async function refresh() {
     toast("Refresh failed: " + e.message, true);
   } finally {
     btn.disabled = false;
-    $("downloadBtn").classList.remove("disabled");
     btn.querySelector(".spinner").hidden = true;
     btn.querySelector(".label").textContent = "Refresh";
   }
 }
 
 $("refreshBtn").onclick = refresh;
-$("downloadBtn").onclick = (e) => {
-  if (e.currentTarget.classList.contains("disabled")) { e.preventDefault(); return; }
-  if (!state.companies.some((c) => c.last_nse || c.last_bse)) {
-    e.preventDefault();
-    toast("No workbook yet – click Refresh first.", true);
-  }
-};
 for (const b of document.querySelectorAll("#exchangeToggle button")) {
   b.onclick = () => { state.exchange = b.dataset.ex; drawChart(); };
 }
