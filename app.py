@@ -1,11 +1,13 @@
-"""FastAPI app: refresh data from NSE/BSE into the workbook, serve charts."""
+"""FastAPI app: refresh data from NSE/BSE into the workbook, serve charts and the file."""
 import threading
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import excel_store as store
+import storage
 from config import BASE_DIR, COMPANIES, START_DATE, XLSX_PATH
 from fetchers.bse import fetch_bse
 from fetchers.nse import fetch_nse
@@ -143,6 +145,18 @@ def do_refresh(symbol: str | None = None, month: str | None = None):
         "charts": {ex: _chart_view(data[sym][ex], ex, month) for ex in ("nse", "bse")},
     }
     return result
+
+
+@app.get("/api/download")
+def download():
+    # The Blob store is private, so the file is streamed through here rather than linked.
+    storage.pull(XLSX_PATH)
+    if not XLSX_PATH.exists():
+        raise HTTPException(404, "Workbook not created yet - click Refresh first")
+    return FileResponse(
+        XLSX_PATH, filename=f"Stock_Trading_Snapshot_{today_ist():%d.%m.%Y}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 # Local dev serves the page; on Vercel the CDN serves public/ before reaching the app.

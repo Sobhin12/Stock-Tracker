@@ -38,7 +38,7 @@ h2 { margin: 0; font-size: 1.1rem; color: var(--navy); }
 .btn:hover { background: var(--cyan-tint); }
 .btn.primary { background: var(--amber); border-color: var(--amber); color: var(--text); }
 .btn.primary:hover { background: #f5a300; }
-.btn:disabled { opacity: .6; cursor: progress; }
+.btn:disabled, .btn.disabled { opacity: .6; cursor: progress; }
 .spinner {
   width: 14px; height: 14px; border: 2px solid rgba(44,44,44,.3); border-top-color: var(--text);
   border-radius: 50%; animation: spin .8s linear infinite;
